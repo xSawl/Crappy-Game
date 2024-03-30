@@ -91,8 +91,8 @@ namespace TarodevController {
             }
 
             if (_frameInput.JumpDown) {
-                _shouldConsumeJump = true;
-                _jumpButtonPressFrame = _fixedFrame;
+                _jumpToConsume = true;
+                _frameJumpWasPressed = _fixedFrame;
             }
 
             if (_frameInput.Move.x != 0) _stickyFeet = false;
@@ -104,6 +104,7 @@ namespace TarodevController {
         protected virtual void FixedUpdate() {
             _fixedFrame++;
 
+            ResetCanJump();
             CheckCollisions();
             HandleCollisions();
             HandleWalls();
@@ -236,8 +237,8 @@ namespace TarodevController {
             if (on) {
                 _speed = Vector2.zero;
                 _currentExternalVelocity = Vector2.zero;
-                _canUseBufferedJump = true;
-                _canUseWallCoyoteJump = true;
+                _bufferedJumpUsable = true;
+                _wallJumpCoyoteUsable = true;
             }
             else {
                 _frameLeftWall = _fixedFrame;
@@ -402,126 +403,73 @@ namespace TarodevController {
 
         #region Jumping
 
-        private bool _shouldConsumeJump; // Flag to indicate if we should consume a jump this frame
-        private bool _canUseBufferedJump; // Flag to indicate if we can use a buffered jump this frame
-        private bool _jumpEndedEarly; // Flag to indicate if the jump was ended early this frame
-        private bool _canUseCoyoteJump; // Flag to indicate if we can use a coyote jump this frame
-        private bool _canUseWallCoyoteJump; // Flag to indicate if we can use a wall coyote jump this frame
-        private int _jumpButtonPressFrame; // Frame when the jump button was last pressed
-        private int _remainingAirJumps; // Number of remaining air jumps
+        private bool _jumpToConsume;
+        private bool _bufferedJumpUsable;
+        private bool _endedJumpEarly;
+        private bool _coyoteUsable;
+        private bool _wallJumpCoyoteUsable;
+        private int _frameJumpWasPressed;
+        private int _airJumpsRemaining;
 
-        // Property to check if we have a buffered jump available
-        private bool HasBufferedJump => _canUseBufferedJump && _fixedFrame < _jumpButtonPressFrame + _stats.JumpBufferFrames;
+        private bool HasBufferedJump => _bufferedJumpUsable && _fixedFrame < _frameJumpWasPressed + _stats.JumpBufferFrames;
 
-        // Property to check if we can use a coyote jump
-        private bool CanUseCoyote => _canUseCoyoteJump && !this._grounded && _fixedFrame < this._frameLeftGrounded + this._stats.CoyoteFrames;
+        private bool CanUseCoyote => _coyoteUsable && !_grounded && _fixedFrame < _frameLeftGrounded + _stats.CoyoteFrames;
 
-        // Property to check if we can use a wall jump
-        private bool CanWallJump => (this._isOnWall && !this._isLeavingWall) || (this._canUseWallCoyoteJump && _fixedFrame < this._frameLeftWall + this._stats.WallJumpCoyoteFrames);
+        private bool CanWallJump => (_isOnWall && !_isLeavingWall) || (_wallJumpCoyoteUsable && _fixedFrame < _frameLeftWall + _stats.WallJumpCoyoteFrames);
 
-        // Property to check if we have remaining air jumps
-        private bool CanAirJump => this._remainingAirJumps > 0;
+        private bool CanAirJump => _airJumpsRemaining > 0;
 
-        // Enum to represent different jump types
-        public enum JumpType
-        {
-            Normal,
-            Wall,
-            Air
-        }
-        // Function to handle jump input and determine which jump to perform
-        protected virtual void HandleJump()
-        {
-            // Check if the jump was ended early this frame
-            if (!this._jumpEndedEarly && !this._grounded && !this._frameInput.JumpHeld && this._rb.velocity.y > 0)
-                this._jumpEndedEarly = true;
+        protected virtual void HandleJump() {
+            if (!_endedJumpEarly && !_grounded && !_frameInput.JumpHeld && _rb.velocity.y > 0) _endedJumpEarly = true; // Early end detection
 
-            // Check if we should consume a jump this frame
-            if (!this._shouldConsumeJump && !this.HasBufferedJump) return;
+            if (!_jumpToConsume && !HasBufferedJump) return;
 
-            // Determine which jump to perform
-            JumpType jumpType;
-            if (this.CanWallJump) jumpType = JumpType.Wall;
-            else if (this.CanStand() && (this._grounded || this.ClimbingLadder || this.CanUseCoyote)) jumpType = JumpType.Normal;
-            else if (this._shouldConsumeJump && this.CanAirJump) jumpType = JumpType.Air;
-            else return;
+            if (CanWallJump) WallJump();
+            else if (CanStand() && (_grounded || ClimbingLadder || CanUseCoyote)) NormalJump();
+            else if (_jumpToConsume && CanAirJump) AirJump();
 
-            // Perform the jump
-            this.PerformJump(jumpType);
-            this._shouldConsumeJump = false; // Always consume the flag
+            _jumpToConsume = false; // Always consume the flag
         }
 
-        // Function to perform a jump of the specified type
-        protected virtual void PerformJump(JumpType jumpType)
-        {
-            switch (jumpType)
+        // Includes Ladder Jumps
+        protected virtual void NormalJump() {
+            if (this.canJump && !this.Crouching)
             {
-                case JumpType.Normal:
-                    PerformNormalJump();
-                    break;
-                case JumpType.Wall:
-                    PerformWallJump();
-                    break;
-                case JumpType.Air:
-                    PerformAirJump();
-                    break;
-                default:
-                    Debug.LogWarning("Invalid jump type: " + jumpType);
-                    break;
+            _endedJumpEarly = false;
+            _bufferedJumpUsable = false;
+            _coyoteUsable = false;
+            ToggleClimbingLadder(false);
+            _speed.y = _stats.JumpPower;
+            Jumped?.Invoke(false);
             }
         }
 
-        // Function to perform a normal jump (includes ladder jumps)
-        protected virtual void PerformNormalJump()
-        {
-            if (this.canJump && !this.Crouching) // Ajoutez la vérification de Crouching ici
-            {
-                this._jumpEndedEarly = false;
-                this._canUseBufferedJump = false;
-                this._canUseCoyoteJump = false;
-                ToggleClimbingLadder(false);
-                this._speed.y = this._stats.JumpPower;
-                Jumped?.Invoke(false);
-            }
-        }
-
-        // Function to perform a wall jump
-        protected virtual void PerformWallJump()
-        {
-            this._jumpEndedEarly = false;
-            this._canUseBufferedJump = false;
-            if (this._isOnWall) this._isLeavingWall = true; // only toggle if it's a real WallJump, not CoyoteWallJump
-            this._canUseWallCoyoteJump = false;
-            this._currentWallJumpMoveMultiplier = 0;
-            this._speed = Vector2.Scale(this._stats.WallJumpPower, new(-this._lastWallContactDirection, 1));
+        protected virtual void WallJump() {
+            _endedJumpEarly = false;
+            _bufferedJumpUsable = false;
+            if (_isOnWall) _isLeavingWall = true; // only toggle if it's a real WallJump, not CoyoteWallJump
+            _wallJumpCoyoteUsable = false;
+            _currentWallJumpMoveMultiplier = 0;
+            _speed = Vector2.Scale(_stats.WallJumpPower, new(-_lastWallDirection, 1));
             Jumped?.Invoke(true);
         }
 
-
-        // Function to perform an air jump
-        protected virtual void PerformAirJump()
-        {
-            this._jumpEndedEarly = false;
-            this._remainingAirJumps--;
-            this._speed.y = this._stats.JumpPower;
-            this._currentExternalVelocity.y = 0; // optional. test it out with a Bouncer if this feels better or worse
+        protected virtual void AirJump() {
+            _endedJumpEarly = false;
+            _airJumpsRemaining--;
+            _speed.y = _stats.JumpPower;
+            _currentExternalVelocity.y = 0; // optional. test it out with a Bouncer if this feels better or worse
             AirJumped?.Invoke();
         }
 
-        // Function to reset jump variables
-        protected virtual void ResetJump()
-        {
-            this._canUseCoyoteJump = true;
-            this._canUseBufferedJump = true;
-            this._jumpEndedEarly = false;
+        protected virtual void ResetJump() {
+            _coyoteUsable = true;
+            _bufferedJumpUsable = true;
+            _endedJumpEarly = false;
             ResetAirJumps();
         }
 
-        // Function to reset the remaining air jumps to the max value
-        protected virtual void ResetAirJumps()
-        {
-            this._remainingAirJumps = this._stats.MaxAirJumps;
-        }
+        protected virtual void ResetAirJumps() => _airJumpsRemaining = _stats.MaxAirJumps;
 
         // Function to reset the ability to jump
         protected virtual void ResetCanJump()
@@ -529,6 +477,7 @@ namespace TarodevController {
             // Only reset if the player is not crouching
             if (!this.Crouching) this.canJump = true;
         }
+
 
         #endregion
 
@@ -540,11 +489,10 @@ namespace TarodevController {
         private bool _dashing;
         private int _startedDashing;
         private float _lastDashTime;
-        public float DashCooldownTime = 1.0f; // Temps de recharge entre chaque dash
 
         protected virtual void HandleDash() {
             Debug.Log("_dashToConsume: " + _dashToConsume);
-            if (_dashToConsume && _canDash && !Crouching && Time.time > _lastDashTime + DashCooldownTime) {
+            if (_dashToConsume && _canDash && !Crouching && Time.time > _lastDashTime + _stats.DashCooldownTime) {
             
                 var dir = new Vector2(_frameInput.Move.x, Mathf.Max(_frameInput.Move.y, 0f)).normalized;
                 if (dir == Vector2.zero) {
@@ -666,7 +614,7 @@ namespace TarodevController {
             // In Air
             else {
                 var inAirGravity = _stats.FallAcceleration;
-                if (_jumpEndedEarly && _speed.y > 0) inAirGravity *= _stats.JumpEndEarlyGravityModifier;
+                if (_endedJumpEarly && _speed.y > 0) inAirGravity *= _stats.JumpEndEarlyGravityModifier;
                 _speed.y = Mathf.MoveTowards(_speed.y, -_stats.MaxFallSpeed, inAirGravity * Time.fixedDeltaTime);
             }
         }

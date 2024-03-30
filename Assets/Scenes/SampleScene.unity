@@ -132,7 +132,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3836054527727189972, guid: 2079dc17ecbbb044c99ad14ac54ad33a, type: 3}
       propertyPath: DashCooldownTime
-      value: 5
+      value: 0.7
       objectReference: {fileID: 0}
     - target: {fileID: 3836054527727189975, guid: 2079dc17ecbbb044c99ad14ac54ad33a, type: 3}
       propertyPath: m_RootOrder

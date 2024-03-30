@@ -159,6 +159,9 @@ namespace TarodevController {
         [Tooltip("Allows the player to dash")]
         public bool AllowDash = true;
 
+        [Tooltip("Cooldown for dash")]
+        public float DashCooldownTime = 0.7f;
+
         [Tooltip("The velocity of the dash")] 
         public float DashVelocity = 50;
 
