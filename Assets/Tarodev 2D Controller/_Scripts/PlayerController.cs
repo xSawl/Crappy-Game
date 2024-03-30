@@ -535,13 +535,17 @@ namespace TarodevController {
         #region Dashing
 
         private bool _dashToConsume;
-        private bool _canDash;
+        private bool _canDash = true;
         private Vector2 _dashVel;
         private bool _dashing;
         private int _startedDashing;
+        private float _lastDashTime;
+        public float DashCooldownTime = 1.0f; // Temps de recharge entre chaque dash
 
         protected virtual void HandleDash() {
-            if (_dashToConsume && _canDash && !Crouching) {
+            Debug.Log("_dashToConsume: " + _dashToConsume);
+            if (_dashToConsume && _canDash && !Crouching && Time.time > _lastDashTime + DashCooldownTime) {
+            
                 var dir = new Vector2(_frameInput.Move.x, Mathf.Max(_frameInput.Move.y, 0f)).normalized;
                 if (dir == Vector2.zero) {
                     _dashToConsume = false;
@@ -552,6 +556,7 @@ namespace TarodevController {
                 _dashing = true;
                 _canDash = false;
                 _startedDashing = _fixedFrame;
+                _lastDashTime = Time.time;
                 DashingChanged?.Invoke(true, dir);
 
                 _currentExternalVelocity = Vector2.zero; // Strip external buildup
