@@ -360,7 +360,7 @@ namespace TarodevController {
 
         #endregion
 
-        #region Crouching
+       #region Crouching
 
         private int _frameStartedCrouching;
 
@@ -474,7 +474,7 @@ namespace TarodevController {
         // Function to perform a normal jump (includes ladder jumps)
         protected virtual void PerformNormalJump()
         {
-            if (this.canJump)
+            if (this.canJump && !this.Crouching) // Ajoutez la vérification de Crouching ici
             {
                 this._jumpEndedEarly = false;
                 this._canUseBufferedJump = false;
@@ -532,7 +532,6 @@ namespace TarodevController {
 
         #endregion
 
-
         #region Dashing
 
         private bool _dashToConsume;
@@ -586,7 +585,7 @@ namespace TarodevController {
 
 
         protected virtual void HandleAttacking() {
-            if (!_attackToConsume) return;
+            if (!_attackToConsume || Crouching) return;
             // note: animation looks weird if we allow attacking while crouched. consider different attack animations or not allow it while crouched
             if (_fixedFrame > _frameLastAttacked + _stats.AttackFrameCooldown) {
                 _frameLastAttacked = _fixedFrame;
