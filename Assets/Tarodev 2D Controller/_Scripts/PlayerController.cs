@@ -45,6 +45,7 @@ namespace TarodevController {
         public bool ClimbingLadder { get; private set; }
         public bool GrabbingLedge { get; private set; }
         public bool ClimbingLedge { get; private set; }
+        private bool canJump = true; //to prevent crouch jumping :)
 
         public virtual void ApplyVelocity(Vector2 vel, PlayerForce forceType) {
             if (forceType == PlayerForce.Burst) _speed += vel;
@@ -90,8 +91,8 @@ namespace TarodevController {
             }
 
             if (_frameInput.JumpDown) {
-                _jumpToConsume = true;
-                _frameJumpWasPressed = _fixedFrame;
+                _shouldConsumeJump = true;
+                _jumpButtonPressFrame = _fixedFrame;
             }
 
             if (_frameInput.Move.x != 0) _stickyFeet = false;
@@ -205,6 +206,7 @@ namespace TarodevController {
 
         private readonly ContactPoint2D[] _wallContact = new ContactPoint2D[1];
         private float _currentWallJumpMoveMultiplier = 1f; // aka "Horizontal input influence"
+        private int _lastWallContactDirection; // Direction of the last wall the character was in contact with (for coyote wall jumps)
         private int _lastWallDirection; // for coyote wall jumps
         private int _frameLeftWall; // for coyote wall jumps
         private bool _isLeavingWall; // prevents immediate re-sticking to wall
@@ -234,8 +236,8 @@ namespace TarodevController {
             if (on) {
                 _speed = Vector2.zero;
                 _currentExternalVelocity = Vector2.zero;
-                _bufferedJumpUsable = true;
-                _wallJumpCoyoteUsable = true;
+                _canUseBufferedJump = true;
+                _canUseWallCoyoteJump = true;
             }
             else {
                 _frameLeftWall = _fixedFrame;
@@ -377,9 +379,13 @@ namespace TarodevController {
         }
 
         protected virtual void ToggleCrouching(bool shouldCrouch) {
-            if (!Crouching && (_isOnWall || ClimbingLadder)) return; // Prevent crouching if climbing
-
+            if (!Crouching && (_isOnWall || ClimbingLadder || !_grounded)) return; // Prevent crouching if climbing
             if (Crouching && !CanStand()) return; // Prevent standing into colliders
+
+            if (Crouching && !shouldCrouch) {
+                // Si le joueur se lève après avoir été accroupi, réactivez la capacité de sauter
+                canJump = true;
+            }
 
             Crouching = shouldCrouch;
             ToggleColliders(!shouldCrouch);
@@ -396,72 +402,136 @@ namespace TarodevController {
 
         #region Jumping
 
-        private bool _jumpToConsume;
-        private bool _bufferedJumpUsable;
-        private bool _endedJumpEarly;
-        private bool _coyoteUsable;
-        private bool _wallJumpCoyoteUsable;
-        private int _frameJumpWasPressed;
-        private int _airJumpsRemaining;
+        private bool _shouldConsumeJump; // Flag to indicate if we should consume a jump this frame
+        private bool _canUseBufferedJump; // Flag to indicate if we can use a buffered jump this frame
+        private bool _jumpEndedEarly; // Flag to indicate if the jump was ended early this frame
+        private bool _canUseCoyoteJump; // Flag to indicate if we can use a coyote jump this frame
+        private bool _canUseWallCoyoteJump; // Flag to indicate if we can use a wall coyote jump this frame
+        private int _jumpButtonPressFrame; // Frame when the jump button was last pressed
+        private int _remainingAirJumps; // Number of remaining air jumps
 
-        private bool HasBufferedJump => _bufferedJumpUsable && _fixedFrame < _frameJumpWasPressed + _stats.JumpBufferFrames;
+        // Property to check if we have a buffered jump available
+        private bool HasBufferedJump => _canUseBufferedJump && _fixedFrame < _jumpButtonPressFrame + _stats.JumpBufferFrames;
 
-        private bool CanUseCoyote => _coyoteUsable && !_grounded && _fixedFrame < _frameLeftGrounded + _stats.CoyoteFrames;
+        // Property to check if we can use a coyote jump
+        private bool CanUseCoyote => _canUseCoyoteJump && !this._grounded && _fixedFrame < this._frameLeftGrounded + this._stats.CoyoteFrames;
 
-        private bool CanWallJump => (_isOnWall && !_isLeavingWall) || (_wallJumpCoyoteUsable && _fixedFrame < _frameLeftWall + _stats.WallJumpCoyoteFrames);
+        // Property to check if we can use a wall jump
+        private bool CanWallJump => (this._isOnWall && !this._isLeavingWall) || (this._canUseWallCoyoteJump && _fixedFrame < this._frameLeftWall + this._stats.WallJumpCoyoteFrames);
 
-        private bool CanAirJump => _airJumpsRemaining > 0;
+        // Property to check if we have remaining air jumps
+        private bool CanAirJump => this._remainingAirJumps > 0;
 
-        protected virtual void HandleJump() {
-            if (!_endedJumpEarly && !_grounded && !_frameInput.JumpHeld && _rb.velocity.y > 0) _endedJumpEarly = true; // Early end detection
+        // Enum to represent different jump types
+        public enum JumpType
+        {
+            Normal,
+            Wall,
+            Air
+        }
+        // Function to handle jump input and determine which jump to perform
+        protected virtual void HandleJump()
+        {
+            // Check if the jump was ended early this frame
+            if (!this._jumpEndedEarly && !this._grounded && !this._frameInput.JumpHeld && this._rb.velocity.y > 0)
+                this._jumpEndedEarly = true;
 
-            if (!_jumpToConsume && !HasBufferedJump) return;
+            // Check if we should consume a jump this frame
+            if (!this._shouldConsumeJump && !this.HasBufferedJump) return;
 
-            if (CanWallJump) WallJump();
-            else if (CanStand() && (_grounded || ClimbingLadder || CanUseCoyote)) NormalJump();
-            else if (_jumpToConsume && CanAirJump) AirJump();
+            // Determine which jump to perform
+            JumpType jumpType;
+            if (this.CanWallJump) jumpType = JumpType.Wall;
+            else if (this.CanStand() && (this._grounded || this.ClimbingLadder || this.CanUseCoyote)) jumpType = JumpType.Normal;
+            else if (this._shouldConsumeJump && this.CanAirJump) jumpType = JumpType.Air;
+            else return;
 
-            _jumpToConsume = false; // Always consume the flag
+            // Perform the jump
+            this.PerformJump(jumpType);
+            this._shouldConsumeJump = false; // Always consume the flag
         }
 
-        // Includes Ladder Jumps
-        protected virtual void NormalJump() {
-            _endedJumpEarly = false;
-            _bufferedJumpUsable = false;
-            _coyoteUsable = false;
-            ToggleClimbingLadder(false);
-            _speed.y = _stats.JumpPower;
-            Jumped?.Invoke(false);
+        // Function to perform a jump of the specified type
+        protected virtual void PerformJump(JumpType jumpType)
+        {
+            switch (jumpType)
+            {
+                case JumpType.Normal:
+                    PerformNormalJump();
+                    break;
+                case JumpType.Wall:
+                    PerformWallJump();
+                    break;
+                case JumpType.Air:
+                    PerformAirJump();
+                    break;
+                default:
+                    Debug.LogWarning("Invalid jump type: " + jumpType);
+                    break;
+            }
         }
 
-        protected virtual void WallJump() {
-            _endedJumpEarly = false;
-            _bufferedJumpUsable = false;
-            if (_isOnWall) _isLeavingWall = true; // only toggle if it's a real WallJump, not CoyoteWallJump
-            _wallJumpCoyoteUsable = false;
-            _currentWallJumpMoveMultiplier = 0;
-            _speed = Vector2.Scale(_stats.WallJumpPower, new(-_lastWallDirection, 1));
+        // Function to perform a normal jump (includes ladder jumps)
+        protected virtual void PerformNormalJump()
+        {
+            if (this.canJump)
+            {
+                this._jumpEndedEarly = false;
+                this._canUseBufferedJump = false;
+                this._canUseCoyoteJump = false;
+                ToggleClimbingLadder(false);
+                this._speed.y = this._stats.JumpPower;
+                Jumped?.Invoke(false);
+            }
+        }
+
+        // Function to perform a wall jump
+        protected virtual void PerformWallJump()
+        {
+            this._jumpEndedEarly = false;
+            this._canUseBufferedJump = false;
+            if (this._isOnWall) this._isLeavingWall = true; // only toggle if it's a real WallJump, not CoyoteWallJump
+            this._canUseWallCoyoteJump = false;
+            this._currentWallJumpMoveMultiplier = 0;
+            this._speed = Vector2.Scale(this._stats.WallJumpPower, new(-this._lastWallContactDirection, 1));
             Jumped?.Invoke(true);
         }
 
-        protected virtual void AirJump() {
-            _endedJumpEarly = false;
-            _airJumpsRemaining--;
-            _speed.y = _stats.JumpPower;
-            _currentExternalVelocity.y = 0; // optional. test it out with a Bouncer if this feels better or worse
+
+        // Function to perform an air jump
+        protected virtual void PerformAirJump()
+        {
+            this._jumpEndedEarly = false;
+            this._remainingAirJumps--;
+            this._speed.y = this._stats.JumpPower;
+            this._currentExternalVelocity.y = 0; // optional. test it out with a Bouncer if this feels better or worse
             AirJumped?.Invoke();
         }
 
-        protected virtual void ResetJump() {
-            _coyoteUsable = true;
-            _bufferedJumpUsable = true;
-            _endedJumpEarly = false;
+        // Function to reset jump variables
+        protected virtual void ResetJump()
+        {
+            this._canUseCoyoteJump = true;
+            this._canUseBufferedJump = true;
+            this._jumpEndedEarly = false;
             ResetAirJumps();
         }
 
-        protected virtual void ResetAirJumps() => _airJumpsRemaining = _stats.MaxAirJumps;
+        // Function to reset the remaining air jumps to the max value
+        protected virtual void ResetAirJumps()
+        {
+            this._remainingAirJumps = this._stats.MaxAirJumps;
+        }
+
+        // Function to reset the ability to jump
+        protected virtual void ResetCanJump()
+        {
+            // Only reset if the player is not crouching
+            if (!this.Crouching) this.canJump = true;
+        }
 
         #endregion
+
 
         #region Dashing
 
@@ -592,7 +662,7 @@ namespace TarodevController {
             // In Air
             else {
                 var inAirGravity = _stats.FallAcceleration;
-                if (_endedJumpEarly && _speed.y > 0) inAirGravity *= _stats.JumpEndEarlyGravityModifier;
+                if (_jumpEndedEarly && _speed.y > 0) inAirGravity *= _stats.JumpEndEarlyGravityModifier;
                 _speed.y = Mathf.MoveTowards(_speed.y, -_stats.MaxFallSpeed, inAirGravity * Time.fixedDeltaTime);
             }
         }
