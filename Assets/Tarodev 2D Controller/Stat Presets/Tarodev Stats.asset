@@ -67,6 +67,7 @@ MonoBehaviour:
   LedgeRaycastSpacing: 0.3
   LedgeClimbDuration: 0.5
   AllowDash: 1
+  DashCooldownTime: 0.7
   DashVelocity: 50
   DashDurationFrames: 5
   DashEndHorizontalMultiplier: 0.25

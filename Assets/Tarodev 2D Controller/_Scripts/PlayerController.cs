@@ -606,10 +606,30 @@ namespace TarodevController {
             }
             // Wall Climbing & Sliding
             else if (_isOnWall && !_isLeavingWall) {
-                if (_frameInput.Move.y > 0) _speed.y = _stats.WallClimbSpeed;
-                else if (_frameInput.Move.y < 0) _speed.y = -_stats.MaxWallFallSpeed;
-                else if (GrabbingLedge) _speed.y = Mathf.MoveTowards(_speed.y, 0, _stats.LedgeGrabDeceleration * Time.fixedDeltaTime);
-                else _speed.y = Mathf.MoveTowards(Mathf.Min(_speed.y, 0), -_stats.MaxWallFallSpeed, _stats.WallFallAcceleration * Time.fixedDeltaTime);
+                if (_wallHits[0] != null) {
+                    // Obtenez le tag du mur avec lequel le joueur est en contact
+                    string wallTag = _wallHits[0].gameObject.tag;
+
+                    if (wallTag == "Climbable") {
+                        if (_frameInput.Move.y > 0) {
+                            _speed.y = _stats.WallClimbSpeed; // Grimper
+                        } else if (_frameInput.Move.y < 0) {
+                            _speed.y = -_stats.MaxWallFallSpeed; // Glisser vers le bas
+                        } else if (GrabbingLedge) {
+                            _speed.y = Mathf.MoveTowards(_speed.y, 0, _stats.LedgeGrabDeceleration * Time.fixedDeltaTime);
+                        } else {
+                            _speed.y = Mathf.MoveTowards(Mathf.Min(_speed.y, 0), -_stats.MaxWallFallSpeed, _stats.WallFallAcceleration * Time.fixedDeltaTime);
+                        }
+                    } else {
+                        if (_frameInput.Move.y < 0) {
+                            _speed.y = -_stats.MaxWallFallSpeed; // Glisser vers le bas
+                        } else if (GrabbingLedge) {
+                            _speed.y = Mathf.MoveTowards(_speed.y, 0, _stats.LedgeGrabDeceleration * Time.fixedDeltaTime);
+                        } else {
+                            _speed.y = Mathf.MoveTowards(Mathf.Min(_speed.y, 0), -_stats.MaxWallFallSpeed, _stats.WallFallAcceleration * Time.fixedDeltaTime);
+                        }
+                    }
+                }
             }
             // In Air
             else {

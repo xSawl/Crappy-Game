@@ -447,7 +447,7 @@ GameObject:
   - component: {fileID: 1131362815}
   - component: {fileID: 1131362814}
   - component: {fileID: 1131362813}
-  m_Layer: 3
+  m_Layer: 6
   m_Name: Wall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -582,7 +582,7 @@ GameObject:
   - component: {fileID: 2028226949}
   m_Layer: 6
   m_Name: Climbable wall
-  m_TagString: Untagged
+  m_TagString: Climbable
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
