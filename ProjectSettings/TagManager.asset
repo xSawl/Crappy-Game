@@ -14,7 +14,7 @@ TagManager:
   - UI
   - Climbable
   - Ladder
-  - 
+  - Camera bounds
   - 
   - 
   - 
@@ -42,9 +42,18 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: Background
+    uniqueID: 1131530019
+    locked: 0
   - name: Decorations
     uniqueID: 3827489575
     locked: 0
   - name: Platforms
     uniqueID: 1349519187
+    locked: 0
+  - name: Player
+    uniqueID: 2447671847
+    locked: 0
+  - name: Foreground
+    uniqueID: 2945208645
     locked: 0
